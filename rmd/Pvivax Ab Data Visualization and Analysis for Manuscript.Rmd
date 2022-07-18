@@ -1,0 +1,1155 @@
+---
+title: "*P. vivax* antibody Data Visualization and Analysis for Manuscript"
+author: "Tuan M. Tran"
+date: "07/18/2022"
+output: bookdown::html_document2
+number_sections: yes
+---
+
+This is the version without code.
+
+# Objective
+
+The goal of this markdown is to visualize the antibody reactivity data from multiplex immunoassays performed by Tenzin Tashi and compiled by Aditi Upadhye for the CTC PDT funded project "Evaluating the dynamics and function of naturally acquired humoral immune responses to *Plasmodium vivax* vaccine candidate antigens in a longitudinal study."
+
+The data consists of IgG responses specific against several *P. vivax* antigens using plasma obtained for Brazilian patients with acute vivax malaria and followed up at days 30, 60, and 180 after initial enrollment. This is an initial attempt to analyze the decay of antibody responses over time.
+
+The major findings of this study to date are:
+
+1. The antigens with the highest seroprevalence after acute *P. vivax* malaria are Pv41, PvGAMA, PvRBP2b.
+2. Antigens that produce the longest-lived IgG responses after acute vivax malaria are PVX_081550, PvRBP2b, and PvMSP3a.
+
+[Table 1. Participant characteristics]\
+[Fig. 1. Correlations of antigen-specific IgG responses]\
+[Fig. 2. Seropositivity at each timepoint by antigen for subjects with data]\
+[Fig. 3. Reactivity over time points, faceted by Pv antigen, as ln(max FI) per subject, exponential decay]\
+[Table 2. Half-lives, linear-mixed effects regression, adjusted analysis]\
+[Table 3. Half-lives, beta-distributed response linear mixed effects model, adjusted analysis]
+
+# Setup
+
+```{r setup, include=TRUE, echo = FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(ggpubr)
+library(ggrepel)
+library(pals)
+library(corrplot)
+library(bookdown)
+datadir <- "/Volumes/GoogleDrive/My Drive/Tran Lab Shared/Projects/Vivax Brazil Immune Responses/PvBrazilAbKinetics/"
+resdir <-"/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
+figdir <- "/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
+```
+
+# Read in data
+
+```{r readin data, echo = TRUE, warning = FALSE, message=FALSE}
+#read in all data
+alldat <- readRDS(paste0(datadir,"Brazil Pvivax dataframe Aditi 02282022.rds")) %>%
+  dplyr::filter(Dilution == "1:400") %>%
+  mutate(Antigen = gsub("DBP-FL", "PvDBP-FL", Antigen)) %>%
+  mutate(Antigen = gsub("MSP3a", "PvMSP3a", Antigen)) %>%
+  mutate(Antigen = gsub("EBP", "PvEBP", Antigen)) %>%
+  mutate(Antigen = gsub("CD4", "ratCD4", Antigen)) %>%
+  mutate(Antigen = factor(Antigen, levels = c("BSA","ratCD4", "Thioredoxin", "Tetanus Toxoid",
+                                              "Pv12",
+                                              "Pv41",
+                                              "PvDBP-FL",
+                                              "PvEBP",
+                                              "PvGAMA",
+                                              "PvMSP3a",
+                                              "PvRBP1a",
+                                              "PvRBP2b",
+                                              "Pvx081550"))) %>%
+  mutate(Antigen = gsub("Pvx081550", "PVX_081550", Antigen)) %>%
+  mutate(Antigen = gsub("Tetanus Toxoid", "tetanus toxoid", Antigen)) %>%
+  mutate(AntigenType = factor(AntigenType, levels = c("background control", "reactivity control", "P. vivax antigen")))
+
+#read in cleaned data
+alldat_norm_bkgd_rem <- readRDS(paste0(datadir, "alldat_norm_bkgd_rem.rds"))  %>%
+  mutate(Antigen = gsub("Tetanus Toxoid", "tetanus toxoid", Antigen))
+```
+
+# Make table of participant characteristics
+
+```{r participant characteristics, echo = FALSE, warning=FALSE, message=FALSE}
+#https://www.r-bloggers.com/2021/11/publication-ready-tables-with-flextable-and-own-theme-in-r/
+library(tableone)
+library(flextable)
+library(officer)
+source("customtab.R")
+
+tab_dat <- alldat %>%
+  dplyr::select(Subject, city, gender, age, "Years of Amanzonia State") %>%
+  distinct() %>%
+  dplyr::rename("Years residence in Amazon basin" = "Years of Amanzonia State",
+                City = city,
+                Gender = gender,
+                "Age, years" = age) %>%
+  mutate(Gender = factor(Gender, levels = c("F", "M"), labels = c("female", "male"))) %>%
+  mutate(`Years residence in Amazon basin` = as.numeric(`Years residence in Amazon basin`)) %>%
+  filter(!grepl("NAC",Subject)) %>% 
+  filter(!grepl("pos",Subject))
+  
+myVars <- c("Gender", "Age, years", "Years residence in Amazon basin")
+catVars <- c("Gender")
+nonnormalVars <- c("Age, years", "Years residence in Amazon basin")
+tab1 <- tab_dat %>% CreateTableOne(vars = myVars,
+                                   strata = "City",
+                                   data = . ,
+                                   factorVars = catVars,
+                                   addOverall = T,
+                                   test = T)
+
+
+tab1_word <- print(tab1,
+quote = F,
+noSpaces = T,
+# smd = T,
+# missing = T,
+test = T,
+contDigits = 1,
+printToggle = T,
+dropEqual = T,
+explain = T,
+nonnormal = nonnormalVars,
+minMax = TRUE)
+#summary(tab1)
+# Convert to dataframe
+tab1_df <- as.data.frame(tab1_word) %>% rownames_to_column(var = "Variable")
+# Rename first variable from n to No.
+#tab1_df$Variable[1] <- "No."
+# Set Table header
+header <- str_squish(str_remove("Table 1. Baseline characteristics of study participants", "\n"))
+# Set Table footer
+footer <- str_squish(str_remove("Numbers are n. (%) unless otherwise noted. Fisher's exact test used for categorical variables. Kruskal-wallis Rank Sum Test used for continuous variables.", "\n"))
+# Set custom_tab() defaults
+customtab_defaults()
+# Create the flextable object
+flextable_1 <- custom_tab(tab1_df, header, footer)
+```
+
+## Table 1. Participant characteristics
+
+```{r table_1, fig.width=8, fig.align='center', echo = FALSE, fig.cap="Table 1. Participant characteristics"}
+flextable_1
+```
+
+```{r table 1 save to doc, echo = FALSE, eval=FALSE}
+# Save as word .docx
+# save_as_docx(flextable_1, path = paste0(resdir,"/Table 1 working.docx"),
+# pr_section =
+# prop_section(page_size = page_size(orient = "landscape"),
+# type = "continuous"))
+```
+
+# Correlations
+
+Make correlation matrices for each timepoint
+
+```{r plot correlation heatmap, echo = FALSE, warning=FALSE, message=FALSE, fig.width=8, fig.height= 8, fig.align='center'}
+#To fix p values and correlation coefficient on the same plot: https://stackoverflow.com/questions/63227830/r-corrplot-plot-correlation-coefficients-along-with-significance-stars
+
+#timepoint 0
+timepoint_0_mat <- alldat_norm_bkgd_rem %>%
+  filter(Group == "Brazilian") %>%
+  filter(AntigenType == "P. vivax antigen") %>%
+  filter(Timepoint == 0) %>%
+  select(c(Subject, Antigen, FI_norm_bkgd_rem)) %>%
+  pivot_wider(., id_cols = Subject, names_from = Antigen, values_from = FI_norm_bkgd_rem) %>%
+  column_to_rownames(var = "Subject") %>%
+  as.matrix() %>%
+  psych::corr.test(., method = "spearman", adjust = "holm")
+
+#timepoint 30
+timepoint_30_mat <- alldat_norm_bkgd_rem %>%
+  filter(Group == "Brazilian") %>%
+  filter(AntigenType == "P. vivax antigen") %>%
+  filter(Timepoint == 30) %>%
+  select(c(Subject, Antigen, FI_norm_bkgd_rem)) %>%
+  pivot_wider(., id_cols = Subject, names_from = Antigen, values_from = FI_norm_bkgd_rem) %>%
+  column_to_rownames(var = "Subject") %>%
+  as.matrix() %>%
+  psych::corr.test(., method = "spearman")
+
+#timepoint 60
+timepoint_60_mat <- alldat_norm_bkgd_rem %>%
+  filter(Group == "Brazilian") %>%
+  filter(AntigenType == "P. vivax antigen") %>%
+  filter(Timepoint == 60) %>%
+  select(c(Subject, Antigen, FI_norm_bkgd_rem)) %>%
+  pivot_wider(., id_cols = Subject, names_from = Antigen, values_from = FI_norm_bkgd_rem) %>%
+  column_to_rownames(var = "Subject") %>%
+  as.matrix() %>%
+  psych::corr.test(., method = "spearman")
+
+#timepoint 180
+timepoint_180_mat <- alldat_norm_bkgd_rem %>%
+  filter(Group == "Brazilian") %>%
+  filter(AntigenType == "P. vivax antigen") %>%
+  filter(Timepoint == 180) %>%
+  select(c(Subject, Antigen, FI_norm_bkgd_rem)) %>%
+  pivot_wider(., id_cols = Subject, names_from = Antigen, values_from = FI_norm_bkgd_rem) %>%
+  column_to_rownames(var = "Subject") %>%
+  as.matrix() %>%
+  psych::corr.test(., method = "spearman")
+```
+
+Assess number of samples per timepoint
+
+```{r look at numbers of samples}
+alldat_norm_bkgd_rem %>%
+  filter(Group == "Brazilian") %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(AntigenType == "P. vivax antigen") %>%
+  select(c(Subject, Antigen, Timepoint, FI_norm_bkgd_rem)) %>%
+  group_by(Antigen, Timepoint) %>%
+  summarise(n = n())
+```
+
+Plot correlation heatmaps by timepoint
+
+## Fig. 1. Correlations of antigen-specific IgG responses
+
+day 0
+
+```{r plot all corrplots knit day 0, echo = TRUE, message=FALSE, warning=FALSE}
+corrplot::corrplot(timepoint_0_mat$r,
+                   method = "square",
+                   order = "hclust",
+                   hclust.method = "ward.D2",
+                   type = "upper",
+                   p.mat = timepoint_0_mat$p,
+                   insig = "label_sig",
+                   sig.level = c(.001, .01, .05),
+                   pch.cex = 1,
+                   pch.col = "white",
+                   tl.col="black",
+                   addCoef.col = "black",
+                   outline=FALSE)
+```
+
+day 30
+
+```{r plot all corrplots  knit day 30, echo = TRUE, message=FALSE, warning=FALSE}
+corrplot::corrplot(timepoint_30_mat$r,
+                   method = "square",
+                   order = "hclust",
+                   hclust.method = "ward.D2",
+                   type = "upper",
+                   p.mat = timepoint_30_mat$p,
+                   insig = "label_sig",
+                   sig.level = c(.001, .01, .05),
+                   pch.cex = 1,
+                   pch.col = "white",
+                   tl.col="black",
+                   addCoef.col = "black",
+                   outline=FALSE)
+```
+
+day 60
+
+```{r plot all corrplots  knit day 60, echo = TRUE, message=FALSE, warning=FALSE}
+corrplot::corrplot(timepoint_60_mat$r,
+                   method = "square",
+                   order = "hclust",
+                   hclust.method = "ward.D2",
+                   type = "upper",
+                   p.mat = timepoint_60_mat$p,
+                   insig = "label_sig",
+                   sig.level = c(.001, .01, .05),
+                   pch.cex = 1,
+                   pch.col = "white",
+                   tl.col="black",
+                   addCoef.col = "black",
+                   outline=FALSE)
+```
+
+day 180
+
+```{r plot all corrplots  knit day 180, echo = TRUE, message=FALSE, warning=FALSE}
+corrplot::corrplot(timepoint_180_mat$r,
+                   method = "square",
+                   order = "hclust",
+                   hclust.method = "ward.D2",
+                   type = "upper",
+                   p.mat = timepoint_180_mat$p,
+                   insig = "label_sig",
+                   sig.level = c(.001, .01, .05),
+                   pch.cex = 1,
+                   pch.col = "white",
+                   tl.col="black",
+                   addCoef.col = "black",
+                   outline=FALSE)
+```
+
+```{r plot all corrplots pdf, eval=FALSE, echo=FALSE}
+# figdir <- "/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
+# cairo_pdf(filename = paste0(figdir, "Figure 1 Corrplots by Time all 4.pdf"), height = 10, width = 10)
+# par(mfrow=c(2,2))
+# corrplot::corrplot(timepoint_0_mat$r,
+#                    method = "square",
+#                    order = "hclust",
+#                    hclust.method = "ward.D2",
+#                    type = "upper",
+#                    p.mat = timepoint_0_mat$p,
+#                    insig = "label_sig",
+#                    sig.level = c(.001, .01, .05),
+#                    pch.cex = 1,
+#                    pch.col = "white",
+#                    tl.col="black",
+#                    addCoef.col = "black",
+#                    outline=FALSE)
+# corrplot::corrplot(timepoint_30_mat$r,
+#                    method = "square",
+#                    order = "hclust",
+#                    hclust.method = "ward.D2",
+#                    type = "upper",
+#                    p.mat = timepoint_30_mat$p,
+#                    insig = "label_sig",
+#                    sig.level = c(.001, .01, .05),
+#                    pch.cex = 1,
+#                    pch.col = "white",
+#                    tl.col="black",
+#                    addCoef.col = "black",
+#                    outline=FALSE)
+# corrplot::corrplot(timepoint_60_mat$r,
+#                    method = "square",
+#                    order = "hclust",
+#                    hclust.method = "ward.D2",
+#                    type = "upper",
+#                    p.mat = timepoint_60_mat$p,
+#                    insig = "label_sig",
+#                    sig.level = c(.001, .01, .05),
+#                    pch.cex = 1,
+#                    pch.col = "white",
+#                    tl.col="black",
+#                    addCoef.col = "black",
+#                    outline=FALSE)
+# corrplot::corrplot(timepoint_180_mat$r,
+#                    method = "square",
+#                    order = "hclust",
+#                    hclust.method = "ward.D2",
+#                    type = "upper",
+#                    p.mat = timepoint_180_mat$p,
+#                    insig = "label_sig",
+#                    sig.level = c(.001, .01, .05),
+#                    pch.cex = 1,
+#                    pch.col = "white",
+#                    tl.col="black",
+#                    addCoef.col = "black",
+#                    outline=FALSE)
+# dev.off()
+```
+
+# Seroprevalence
+
+Before preceding further, we want to determine what a seropositive is using the North American controls to set a threshold for positivity (mean + 3 st dev).
+
+We first filter out the North American controls, noting that only all were ran on Plate 1 except for NAC 1, which was run on all plates. For consistency, and being that we already normalized based on the positive control standard, we will only use NACs on Plate 1 for this.
+
+```{r set seropos controls, echo = FALSE, warning=FALSE, message=FALSE}
+#table(alldat_norm_bkgd_rem$Subject, alldat_norm_bkgd_rem$Plate)
+#NAC_2 belonged to Dr. Tran, NAC_18, NAC_19, and NAC_20 were from John lab.
+#Indiana Blood Bank NACs :- 3,9,11,13,14,15,16 these have unknown malaria-exposure status
+
+ibc_NACs <- c("NAC_3", "NAC_9", "NAC_11", "NAC_13", "NAC_14", "NAC_15", "NAC_16")
+ChandyLab_NACs <- c("NAC_18", "NAC_19", "NAC_20") #confirmed that these NACs were NOT exposed to malaria
+non_naive_NACs <- c(ibc_NACs,"NAC_2") 
+
+alldat_norm_bkgd_rem <- alldat_norm_bkgd_rem %>%
+  filter(!grepl("1/100", Subject)) %>%
+  filter(!Subject %in% non_naive_NACs)
+
+NAC_dat <- alldat_norm_bkgd_rem %>%
+  filter(Group == "North_American" & Plate == "Plate1" & AntigenType == "P. vivax antigen") %>%
+  group_by(Antigen) %>%
+  summarise(NAC_Ag_mean = mean(FI_norm_bkgd_rem), NAC_Ag_SD = sd(FI_norm_bkgd_rem)) %>%
+  mutate(sero_pos_cutoff = NAC_Ag_mean + 2* NAC_Ag_SD)
+
+alldat_norm_bkgd_rem <- alldat_norm_bkgd_rem %>%
+  left_join(., NAC_dat, by = "Antigen") %>%
+  mutate(AU = FI_norm_bkgd_rem/sero_pos_cutoff) %>%
+  mutate(seropositive = ifelse(AU > 1, 1, 0))
+```
+
+Evaluate seroprevalence (% seropositive) for each timepoint, faceted by antigen
+
+```{r seroprevalence by antigen, echo = TRUE, warning=FALSE, message=FALSE, fig.align='center', fig.cap="Seroprevalence at each timepoint by antigen"}
+alldat_norm_bkgd_rem %>%
+  filter(AntigenType == "P. vivax antigen" & Group == "Brazilian") %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(!is.na(seropositive)) %>%
+  group_by(Antigen, Timepoint) %>%
+  summarize(n = n(), seroprevalence = sum(seropositive)/n()) %>%
+  mutate(timepoint = factor(Timepoint)) %>%
+  mutate(timepoint = paste0(timepoint, " (n=", n, ")")) %>%
+  mutate(timepoint = fct_reorder(timepoint, Timepoint, .desc = FALSE)) %>%
+  ggplot(., aes(x=timepoint, y = seroprevalence)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) +
+  ylab("% seropositive") +
+  xlab("days from acute vivax malaria") +
+  geom_hline(yintercept = .50, linetype = "dotted", color="red") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  facet_wrap(~Antigen)
+```
+
+The data shows that >50% seroprevalence is maintained for Pv41, PvGAMA, and PvRBP2 from acute presentation all the way up to 180 days. Pv12 and PvEBP also demonstrate more prolonged maintenance of seropositivity 180 days from acute vivax malaria.
+
+We take advantage of the longitudinal data to ask how many people are seropositive at admission and either seroconvert or serorevert over time?
+
+```{r heatmap of seropositivity over time, echo = FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height= 12, fig.align='center'}
+library(viridis)
+label_df <- alldat_norm_bkgd_rem %>%
+  filter(AntigenType == "P. vivax antigen" & Group == "Brazilian") %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(!is.na(seropositive)) %>%
+  group_by(Antigen, Timepoint) %>%
+  summarize(n = n(), seropositive = sum(seropositive), seroprevalence = signif(100*(sum(seropositive)/n()),3)) %>%
+  mutate(timepoint_lab = factor(Timepoint)) %>%
+  mutate(timepoint_lab = paste0(timepoint_lab, " (", seropositive, "/", n, ", ",seroprevalence,"%)")) %>%
+  mutate(timepoint_lab = fct_reorder(timepoint_lab, Timepoint, .desc = FALSE))
+
+has_value_df <- alldat_norm_bkgd_rem %>%
+  filter(AntigenType == "P. vivax antigen" & Group == "Brazilian") %>%
+  filter(!is.na(Timepoint)) %>%
+  mutate(subject = factor(Subject)) %>%
+  mutate(reactivity = factor(seropositive, levels = c(0,1), labels = c("seronegative","seropositive"))) %>%
+  mutate(has_value = ifelse(seropositive == 0 | seropositive == 1, 1, 0)) %>%
+  select(subject, Antigen, Timepoint, has_value) %>%
+  group_by(subject, Antigen) %>%
+  summarize(n_timepoints = n())
+
+seropos_ag_time <- alldat_norm_bkgd_rem %>%
+  filter(AntigenType == "P. vivax antigen" & Group == "Brazilian") %>%
+  filter(!is.na(Timepoint)) %>%
+  mutate(subject = factor(Subject)) %>%
+  mutate(reactivity = factor(seropositive, levels = c(0,1), labels = c("seronegative","seropositive"))) %>%
+  select(subject, Antigen, Timepoint, FI_norm_bkgd_rem, reactivity, seropositive, AU) %>%
+  left_join(.,
+            has_value_df,
+            by = c("subject", "Antigen")) %>%
+  group_by(Antigen, Timepoint) %>%
+  ungroup() %>%
+  left_join(., label_df %>%
+              select(Antigen, Timepoint, timepoint_lab),
+            by = c("Antigen", "Timepoint")) %>%
+  left_join(., label_df %>%
+              select(Antigen, seroprevalence)) %>%
+  mutate(timepoint_lab = fct_reorder(timepoint_lab, Timepoint, .desc = FALSE)) %>%
+  mutate(subj_order = n_timepoints + seropositive) %>%
+  mutate(subject = fct_reorder(subject, subj_order, .desc = FALSE)) %>%
+  mutate(Antigen = fct_reorder(Antigen, seroprevalence, .fun =  max, .desc = TRUE)) %>%
+  mutate(AU = ifelse(AU > 1, AU, 0)) %>%
+  #ggplot(., aes(x=timepoint_lab, y = subject, fill = reactivity)) +
+  ggplot(., aes(x=timepoint_lab, y = subject, fill = log(AU))) +
+  geom_tile(color = "white", size = 0.1) +
+  #scale_fill_manual(values = c("gray80", "black")) +
+  scale_fill_continuous(type = "viridis", na.value="gray80") +
+  #coord_equal() +
+  facet_wrap(~Antigen, nrow = 1, scales = "free_x") +
+  labs( x= "days from acute vivax (seropositive/total, seroprevalence)",
+       y = "subjects") +
+  ggthemes::theme_tufte(base_family="Helvetica") + 
+  theme(text = element_text(size=11),
+        axis.ticks=element_blank(),
+        axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+        #axis.text.y = element_blank(),
+        axis.text=element_text(size=9.5),
+        panel.border=element_blank(),
+        plot.title=element_text(hjust=0),
+        strip.text=element_text(hjust=0),
+        panel.spacing.x = unit(0.25, "cm"),
+        panel.spacing.y = unit(0.25, "cm"),
+        legend.title=element_text(size=8),
+        legend.title.align=1,
+        legend.text=element_text(size=8),
+        legend.position="bottom",
+        legend.key.size=unit(0.2, "cm"),
+        legend.key.width=unit(1, "cm"))
+```
+
+## Fig. 2. Seropositivity at each timepoint by antigen for subjects with data
+
+```{r plot heatmap of seropositivity over time, echo = FALSE, warning=FALSE, message=FALSE, fig.width=12, fig.height= 12, fig.align='center'}
+seropos_ag_time
+```
+
+```{r save seroprevalence plot, echo=FALSE}
+figdir <- "/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
+# ggsave(plot = seropos_ag_time,
+#        filename = paste0(figdir, "Fig 2 Seroprevalence by Antigen Over Time Continuous 06072022.pdf"),
+#        units = "in",
+#        width = 7.5,
+#        height = 7.5)
+```
+
+Subjects with all four time points
+
+```{r filter subjects with all 4 timepoints, echo = TRUE, warning=FALSE, message=FALSE, fig.width=12, fig.height= 3, fig.align='center'}
+mytable <- table("subject" = alldat_norm_bkgd_rem$Subject, "time point" = alldat_norm_bkgd_rem$Timepoint)
+
+#with 0, 30, 60, 180
+subjects_with_0_3_60_180 <- as.data.frame.matrix(mytable, optional = TRUE, make.names = TRUE) %>%
+  rownames_to_column(var = "Subject") %>%
+  as_tibble() %>%
+  dplyr::filter(`0` != 0 & `30` != 0 & `60` != 0 & `180` != 0) %>%
+  .$Subject
+
+length(unique(subjects_with_0_3_60_180))
+
+alldat_norm_bkgd_rem %>%
+  filter(Subject %in% subjects_with_0_3_60_180) %>%
+  filter(AntigenType == "P. vivax antigen" & Group == "Brazilian") %>%
+  filter(!is.na(Timepoint)) %>%
+  mutate(timepoint = factor(Timepoint)) %>%
+  mutate(subject = factor(Subject)) %>%
+  mutate(reactivity = factor(seropositive, levels = c(0,1), labels = c("seronegative","seropositive"))) %>%
+  select(subject, Antigen, timepoint, FI_norm_bkgd_rem, reactivity, seropositive) %>%
+  group_by(Antigen, timepoint) %>%
+  mutate(subject = fct_reorder(subject, FI_norm_bkgd_rem, .desc = FALSE)) %>%
+  ungroup() %>%
+  ggplot(., aes(x=timepoint, y = subject, fill = reactivity)) +
+  geom_tile(color = "white", size = 0.1) +
+  scale_fill_manual(values = c("gray80", "black")) +
+  #scale_fill_viridis(name="reactivity", discrete = TRUE, option = "magma", direction = -1) +
+  coord_equal() +
+  facet_wrap(~Antigen, nrow = 1) +
+  labs(x="days from acute vivax", y="subjects", title = "Seropositivity over time") +
+  ggthemes::theme_tufte(base_family="Helvetica") + 
+  theme(axis.ticks=element_blank(),
+        axis.text=element_text(size=12),
+        panel.border=element_blank(),
+        plot.title=element_text(hjust=0),
+        strip.text=element_text(hjust=0),
+        panel.spacing.x = unit(0.25, "cm"),
+        panel.spacing.y = unit(0.25, "cm"),
+        legend.title=element_text(size=8),
+        legend.title.align=1,
+        legend.text=element_text(size=8),
+        legend.position="bottom",
+        legend.key.size=unit(0.2, "cm"),
+        legend.key.width=unit(1, "cm"))
+```
+
+# Percent of max response
+
+Lastly, we can also visualize as percent of max, which also does not need any normalization or background subtraction given these are canceled out. Hence, raw FI is used. 
+
+## Wrangle data
+
+Strategy is to group by subject and antigen and divide raw FI over max(FI) and express as a percentage.
+
+```{r pct of max, warning=FALSE, echo = TRUE, message=FALSE}
+alldat_norm_bkgd_rem_pctmax <- alldat_norm_bkgd_rem %>%
+  group_by(Plate, Subject, Antigen) %>%
+  mutate(FI_pct_max = FI_norm_bkgd_rem/max(FI_norm_bkgd_rem, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+Determine subjects who have data at days 0 and 30 and days 0, 30, 60.
+
+```{r filter subjects that have at least day 0 and days 30, echo = TRUE, warning=FALSE, message=FALSE}
+mytable <- table("subject" = alldat_norm_bkgd_rem$Subject, "time point" = alldat_norm_bkgd_rem$Timepoint)
+
+#subjects with at least day 0 and 30 data
+subjects_with_0_30 <- as.data.frame.matrix(mytable, optional = TRUE, make.names = TRUE) %>%
+  rownames_to_column(var = "Subject") %>%
+  as_tibble() %>%
+  dplyr::filter(`0` != 0 & `30` != 0) %>%
+  .$Subject
+
+length(unique(subjects_with_0_30))
+
+#with 0, 30, 60
+subjects_with_0_3_60 <- as.data.frame.matrix(mytable, optional = TRUE, make.names = TRUE) %>%
+  rownames_to_column(var = "Subject") %>%
+  as_tibble() %>%
+  dplyr::filter(`0` != 0 & `30` != 0 & `60` != 0) %>%
+  .$Subject
+
+length(unique(subjects_with_0_3_60))
+```
+
+```{r plot pct of max over time, eval= FALSE, echo = FALSE, warning=FALSE, message=FALSE, fig.width=10, fig.height=6, fig.align='center', fig.cap="Reactivity over time points by antigen, faceted by antigen type, as percent of max FI per subject, median"}
+alldat_norm_bkgd_rem_pctmax %>%
+  filter(Subject  %in% subjects_with_0_30) %>% #filter on subjects with at least day 0 and 30 data
+  ggplot(., aes(x=Timepoint, y = FI_pct_max, group = Antigen, color = Antigen)) +
+  #geom_point() +
+  stat_summary(aes(group=Antigen), fun=median, geom="line") +
+  geom_hline(yintercept = 1, linetype = "dotted", color = "gray") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_continuous(breaks = c(0,30,60,90,120,150,180)) +
+  theme_bw() +
+  scale_color_manual(values=as.vector(glasbey(length(summary(factor(alldat$Antigen)))))) + 
+  facet_wrap(~AntigenType)
+```
+
+# Explore models
+
+Estimate the curve from day 0 through day 180 as exponential decay. For this, we determine the timepoint with the max FI for each antigen for each subject, and then analyze only values from the max timepoint onward to give the most accurate model of decay. This is because values prior to the max are not needed to determine decay and actually makes the decay model less accurate
+
+You can plot the exponential decay fit using the following:
+(see https://stackoverflow.com/questions/41101841/exponential-fit-in-ggplot-r).
+By taking the natural log of the FI, you can then plot as linear decay.
+
+Decay be approximated by as simple linear model. Since we're using repeated measures, we will opt for a mixed effects model with random intercepts for subjects.
+Since we have different slopes for each antigen, we will use the do and tidy functions applied to lmer.
+
+## Calculate half-lives
+
+Multiple linear regression with ln(reactivity) as the dependent variable and time (days) as the independent variable in separate models unadjusted or adjusted for years living in the malaria-endemic Amazon region. A separate model was run for each antigen. Half-life (t1/2) was calculated as ln(0.5)/estimate and further converted to months by dividing by 30. P values were adjusted for multiple comparisons (antigens) using the Benjamini-Hochberg (BH) procedure.
+
+## Clean data for model building
+
+Requirements
+1. Use only data from timepoint with max FI for each subject and antigen onward so as to accurately model decay
+2. Select only subjects with at least two datapoints from max timepoint onward
+
+```{r use mixed approach, echo = TRUE, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
+myantigens <- c("Pv41", "PvGAMA", "PvRBP2b", "PVX_081550", "PvDBP-FL", "PvEBP", "Pv12", "PvMSP3a", "tetanus toxoid")
+#not usd for manuscript
+#https://academic.oup.com/abt/article/4/3/144/6309336
+#tetanus antibodies: https://www.nejm.org/doi/full/10.1056/NEJMoa066092
+library(lmerTest)
+halflife_res_mixed <- alldat_norm_bkgd_rem_pctmax %>%
+  select(c(Subject, Group, AntigenType, Antigen, Timepoint, Years_Endemic, gender, age, FI_norm_bkgd_rem, FI_pct_max)) %>%
+  filter(Group == "Brazilian") %>% #filter only Brazilian samples
+  filter(Subject != "pos_control") %>% #remove positive controls
+  filter(!is.nan(FI_pct_max)) %>% #remove NaNs
+  filter(Antigen %in% myantigens) %>% #filter on only Pv antigens that are have seroprevalence >50%
+  left_join(., alldat %>%
+              filter(Group == "Brazilian") %>% #filter only Brazilian samples
+              filter(Subject != "pos_control") %>% #remove positive controls
+              select(Subject, "Number of prior malaria episodes") %>%
+              rename(Prior_malaria = "Number of prior malaria episodes") %>%
+              distinct(Subject, .keep_all = TRUE) %>%
+              mutate(Prior_malaria = as.integer(Prior_malaria)),
+            by = "Subject") %>%
+  mutate(Antigen = factor(Antigen, levels = c("Pv41", "PvGAMA", "PvRBP2b", "PVX_081550", "PvDBP-FL", "PvEBP", "Pv12", "PvMSP3a", "tetanus toxoid"))) %>% 
+  mutate(Years_Endemic = as.numeric(Years_Endemic)) %>% #this line is the one that gives the "NAs introduced by coercion" message
+  mutate(Years_Endemic = ifelse(is.na(Years_Endemic),median(Years_Endemic, na.rm = TRUE),Years_Endemic)) %>% #impute missing variable for 2 subjects
+  mutate(Prior_malaria = ifelse(is.na(Prior_malaria),median(Prior_malaria, na.rm = TRUE),Prior_malaria)) %>% #impute missing variable for 4 subjects
+  mutate(ln_FI_pct_max = log(FI_pct_max+0.0001)) %>%
+  mutate(ln_FI_norm_bkgd_rem = log(FI_norm_bkgd_rem+1)) %>% 
+  arrange(Subject, Antigen, Timepoint) %>%
+  group_by(Subject, Antigen) %>%
+  mutate(days_from_max_pct = Timepoint - Timepoint[which.max(FI_norm_bkgd_rem)]) %>%
+  filter(between(row_number(),which.max(FI_norm_bkgd_rem), n())) %>%  #this line removes all values before the max so that we can estimate decay from the highest available value
+  filter(n()>1) %>% #filter subjects with at least two data points
+  ungroup()
+
+#Subject 32 did not have tetanus toxoid response, so removed from analysis
+halflife_res_mixed <- halflife_res_mixed %>%
+  filter(!(Subject == "032" & Antigen == "tetanus toxoid"))
+```
+
+## Fig. 3. Reactivity over time points, faceted by Pv antigen, as ln(max FI) per subject, exponential decay
+
+Plot exponential decay
+
+```{r plot exponential decay , echo = TRUE, fig.align='center', fig.width=9, fig.height=9}
+#add small prior to FI_pct_max to avoid taking log of zero
+exponential_decay_plot_all <- halflife_res_mixed %>%
+  ggplot(., aes(x=days_from_max_pct, y = FI_pct_max + 0.0001, fill= Antigen, group = Antigen, color = Antigen)) +
+  #geom_point(colour="black",pch=21, size=2.5) +
+  #geom_smooth(method ="lm", formula = y~x, alpha = 0.15) +
+  geom_smooth(method="glm", formula=y~x, method.args=list(family=gaussian(link="log")), alpha = 0.15, se = TRUE) +
+  geom_hline(yintercept = c(0.25,0.5,0.75,1), linetype = "dotted", color = "gray") +
+  scale_y_continuous(labels = scales::percent, breaks = c(0.25,0.5,0.75,1)) +
+  scale_x_continuous(breaks = c(0,30,60,90,120,150,180)) +
+  ylab("percent of max antibody reactivity") +
+  xlab("days after max antibody reactivity") +
+  theme_bw() +
+  theme(text = element_text(size=11),
+        axis.ticks=element_blank(),
+        #axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+        axis.text=element_text(size=6.5),
+        panel.border=element_blank(),
+        plot.title=element_text(hjust=0),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.25, "cm"),
+        panel.spacing.y = unit(0.25, "cm"),
+        legend.position = "top",
+        legend.title=element_blank(),
+        legend.title.align=1,
+        legend.text=element_text(size=8),
+        legend.key.size=unit(0.15, "cm"),
+        legend.key.width=unit(0.15, "cm")) +
+  scale_color_brewer(palette="Spectral") +
+  scale_fill_brewer(palette="Spectral")
+ 
+exponential_decay_plot_all
+```
+
+```{r plot exponential decay facet, echo = TRUE, fig.align='center', fig.width=9, fig.height=9}
+#refit model
+nls_fit <- halflife_res_mixed %>%
+  nls(formula = FI_pct_max + 0.0001 ~ a*exp(-b *days_from_max_pct), 
+               start = c(a=10, b=0.01), data = .)
+coef(nls_fit)
+
+#add small prior to FI_pct_max to avoid taking log of zero
+exponential_decay_plot_all_facet <- exponential_decay_plot_all +
+  stat_regline_equation(label.y = 1.07, label.x = 100, aes(label = ..adj.rr.label..), color = "gray10", cex = 3) +
+  theme(legend.position = "none") +
+  facet_wrap(~Antigen)
+ 
+exponential_decay_plot_all_facet
+```
+
+Plot natural log of FI to linearize
+
+```{r estimate as exponential decay facet by antigen, echo = TRUE, warning=FALSE, message=FALSE, fig.align='center', fig.width=9, fig.height=9}
+#add small prior to FI_pct_max to avoid taking log of zero
+linear_decay_plot_facet <- halflife_res_mixed %>%
+  ggplot(., aes(x=days_from_max_pct, y = ln_FI_pct_max, group = Antigen, fill= Antigen, color = Antigen)) +
+  geom_point(colour="black",pch=21, size=2.5) +
+  geom_smooth(method ="lm", formula = y~x, alpha = 0.15) +
+  #geom_smooth(method="glm", formula=y~x, method.args=list(family=gaussian(link="log")), alpha = 0.15, se = TRUE) +
+  #geom_hline(yintercept = c(0.25,0.5,0.75,1), linetype = "dotted", color = "gray") +
+  #scale_y_continuous(labels = scales::percent, breaks = c(0.25,0.5,0.75,1)) +
+  scale_x_continuous(breaks = c(0,30,60,90,120,150,180)) +
+  ylab("ln(proportion max reactivity)") +
+  xlab("days after max antibody reactivity") +
+  theme_bw() +
+  scale_color_brewer(palette="Spectral") +
+  scale_fill_brewer(palette="Spectral") +
+  #stat_regline_equation(label.y = -5, label.x = 5, aes(label = ..rr.label..), color = "gray10") +
+  stat_regline_equation(label.y = -6, label.x = 5, aes(label = ..adj.rr.label..), color = "gray10", cex = 3) +
+  facet_wrap(~Antigen) +
+  theme(text = element_text(size=11),
+        axis.ticks=element_blank(),
+        #axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+        axis.text=element_text(size=6.5),
+        panel.border=element_blank(),
+        plot.title=element_text(hjust=0),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.25, "cm"),
+        panel.spacing.y = unit(0.25, "cm"),
+        # legend.title=element_text(size=8),
+        # legend.title.align=1,
+        # legend.text=element_text(size=8),
+        # legend.key.size=unit(0.2, "cm"),
+        # legend.key.width=unit(1, "cm"),
+        legend.position="none") 
+
+linear_decay_plot_facet
+```
+
+```{r save figure 3, eval=FALSE, echo=FALSE, fig.align='center', fig.width=9, fig.height=9}
+cairo_pdf(filename = paste0(figdir, "Fig 3 ln proportion max reactivity by days after max by antigen.pdf"), width = 9, height = 6)
+ggarrange(exponential_decay_plot_all, linear_decay_plot_facet, common.legend = FALSE, labels = "AUTO")
+dev.off()
+```
+```{r save figure 3 v2, eval=FALSE, echo=FALSE, fig.align='center', fig.width=9, fig.height=9}
+cairo_pdf(filename = paste0(figdir, "Fig 3 ln proportion max reactivity by days after max by antigen v2.pdf"), width = 10, height = 6)
+ggarrange(exponential_decay_plot_all, exponential_decay_plot_all_facet, common.legend = FALSE, labels = "AUTO")
+dev.off()
+```
+
+# Linear mixed effects model using lmer
+
+
+```{r add city, echo=TRUE}
+halflife_res_mixed <- halflife_res_mixed %>%
+  left_join(., alldat %>%
+              dplyr::select(c(Subject, city)) %>%
+              filter(!duplicated(Subject)) %>%
+              drop_na(),
+            by = "Subject")
+```
+
+## Unadjusted
+
+```{r lmer unadj model, warning=FALSE, message=FALSE}
+#https://stackoverflow.com/questions/66689587/what-does-the-syntax-mean-in-an-r-formula
+lmer_unadj_res <- halflife_res_mixed %>%
+  mutate(ln_FI_norm_bkgd_rem = log(FI_norm_bkgd_rem+1)) %>% #add 1 to all values to avoid taking log of zero
+  group_by(Antigen) %>%
+  do(broomExtra::tidy(lmerTest::lmer(ln_FI_norm_bkgd_rem~days_from_max_pct + (1|Subject), data = .), conf.int = TRUE)) %>%
+  ungroup() %>%
+  mutate(p.value = as.numeric(formatC(p.value, format = "e", digits = 2))) %>%
+  mutate("BH-adjusted.p.value" = as.numeric(p.adjust(p.value, method = "BH"))) %>%
+  mutate(halflife_days = log(0.5)/estimate) %>%
+  mutate(halflife_days_lowCI = log(0.5)/conf.low) %>%
+  mutate(halflife_days_highCI = log(0.5)/conf.high) %>%
+  mutate(halflife_months = halflife_days/30) %>%
+  mutate(halflife_years = halflife_days/365.25) %>%
+  mutate(across(where(is.numeric), signif, 2)) %>%
+  dplyr::filter(term == "days_from_max_pct") %>%
+  mutate(significant = ifelse(.$"BH-adjusted.p.value"<0.05, "*", "NS")) %>%
+  mutate("BH-adjusted.p.value" = formatC(.$"BH-adjusted.p.value", format = "e", digits = 2)) %>%
+  arrange(desc(halflife_days))
+```
+
+```{r make table unadj lmer, echo = TRUE, warning=FALSE, message=FALSE, fig.width=12}
+library(tableone)
+library(flextable)
+library(officer)
+source("customtab.R")
+
+foo1 <- lmer_unadj_res %>%
+  dplyr::select(Antigen, estimate, std.error, statistic, halflife_days, halflife_days_lowCI, halflife_days_highCI)
+  
+# Rename first variable from n to No.
+#tab1_df$Variable[1] <- "No."
+# Set Table header
+header <- str_squish(str_remove("Table 2. Antibody half-life determination using linear mixed-effects regression of antibody reactivity", "\n"))
+# Set Table footer
+footer <- str_squish(str_remove("A linear mixed effects regression with ln(reactivity) as the dependent variable and time (days) and subject as fixed and random effects, respectively. Half-life (t1/2) was calculated as ln(0.5)/estimate.", "\n"))
+# Set custom_tab() defaults
+customtab_defaults()
+# Create the flextable object
+flextable_lmer_unadj_res <- custom_tab(foo1, header, footer)
+```
+
+## Table 2. Half-lives, linear-mixed effects regression, unadjusted analysis
+
+```{r render table lmer unadj, echo = FALSE, warning=FALSE, message=FALSE, fig.width=12}
+flextable_lmer_unadj_res
+```
+
+## Adjusted
+
+```{r lmer adj model, warning=FALSE, message=FALSE}
+#https://stackoverflow.com/questions/66689587/what-does-the-syntax-mean-in-an-r-formula
+lmer_adj_res <- halflife_res_mixed %>%
+  mutate(ln_FI_norm_bkgd_rem = log(FI_norm_bkgd_rem+1)) %>% #add 1 to all values to avoid taking log of zero
+  group_by(Antigen) %>%
+  do(broomExtra::tidy(lmerTest::lmer(ln_FI_norm_bkgd_rem~Years_Endemic + Prior_malaria  + age + factor(gender) + factor(city) + days_from_max_pct + (1|Subject), data = .), conf.int = TRUE)) %>%
+  ungroup() %>%
+  mutate(p.value = as.numeric(formatC(p.value, format = "e", digits = 2))) %>%
+  mutate("BH-adjusted.p.value" = as.numeric(p.adjust(p.value, method = "BH"))) %>%
+  mutate(halflife_days = log(0.5)/estimate) %>%
+  mutate(halflife_days_lowCI = log(0.5)/conf.low) %>%
+  mutate(halflife_days_highCI = log(0.5)/conf.high) %>%
+  mutate(halflife_months = halflife_days/30) %>%
+  mutate(halflife_years = halflife_days/365.25) %>%
+  mutate(across(where(is.numeric), signif, 2)) %>%
+  dplyr::filter(term == "days_from_max_pct") %>%
+  mutate(significant = ifelse(.$"BH-adjusted.p.value"<0.05, "*", "NS")) %>%
+  mutate("BH-adjusted.p.value" = formatC(.$"BH-adjusted.p.value", format = "e", digits = 2)) %>%
+  arrange(desc(halflife_days))
+```
+
+```{r make table lmer 2, echo = TRUE, warning=FALSE, message=FALSE, fig.width=12}
+library(tableone)
+library(flextable)
+library(officer)
+source("customtab.R")
+
+foo2 <- lmer_adj_res %>%
+  dplyr::select(Antigen, estimate, std.error, "BH-adjusted.p.value", significant, halflife_days, halflife_days_lowCI, halflife_days_highCI)
+
+# Rename first variable from n to No.
+#tab1_df$Variable[1] <- "No."
+# Set Table header
+header <- str_squish(str_remove("Table S2. Antibody half-life determination using linear mixed-effects regression of antibody reactivity, adjusted analysis", "\n"))
+# Set Table footer
+footer <- str_squish(str_remove("A linear mixed effects regression with ln(reactivity) as the dependent variable and time (days), sex, age, city, and years in the malaria-endemic Amazon region as fixed effects and subject as a random effect. Half-life (t1/2) was calculated as ln(0.5)/estimate.", "\n"))
+# Set custom_tab() defaults
+customtab_defaults()
+# Create the flextable object
+flextable_lmer_adj_res <- custom_tab(foo2, header, footer)
+```
+
+## Table S2. Half-lives, linear-mixed effects regression, adjusted analysis
+
+```{r render table lmer adj, eval=TRUE, echo = FALSE, warning=FALSE, message=FALSE, fig.width=12}
+flextable_lmer_adj_res
+```
+
+```{r save table 2 to word, echo = FALSE, eval=FALSE}
+# Save as word .docx
+flextable::save_as_docx(flextable_lmer_unadj_res, path = paste0(resdir,"/Table 2 lmer unadjusted half life 06072022.docx"),
+pr_section =
+officer::prop_section(page_size = officer::page_size(orient = "portrait"),
+type = "continuous"))
+
+#https://journals.plos.org/plosntds/article?id=10.1371/journal.pntd.0009165
+
+#Recently, longitudinal studies have provided estimates of the longevity of antibody response against PvRBP2b, estimating a mean half-life of ~ 3.8 months in cohorts from Thailand and Brazil [11], indicating the moderate longevity of antibodies even in low transmission settings.
+```
+
+# Table S2. Include more measures and both models
+
+```{r make table S2, echo=TRUE}
+unadj_and_adj <- lmer_unadj_res %>%
+  dplyr::select(-c(effect, df, group, term, halflife_months, halflife_years, significant)) %>%
+  left_join(., lmer_adj_res %>%
+              dplyr::select(-c(effect, df, group, term, halflife_months, halflife_years, significant)),
+  by = "Antigen")
+colnames(unadj_and_adj) <- gsub("\\.x", "_unadj", colnames(unadj_and_adj))
+colnames(unadj_and_adj) <- gsub("\\.y", "_adj", colnames(unadj_and_adj))
+```
+
+```{r write table S1, echo=TRUE}
+writexl::write_xlsx(unadj_and_adj, paste0(resdir, "Table S1 lmer both adj and unadj include prior malaria 06122022.xlsx"))
+```
+
+We can also use a linear mixed effects model with a beta-distributed response using FI_pct_max given that the y (dependent variable) is bounded by 0 and 1. This can be achieved from shifting the 0 and 1 values slight towards 0.5.
+
+```{r glmm adaptibe mixed model, echo = TRUE, eval= TRUE, warning=FALSE, message=FALSE}
+#https://stats.stackexchange.com/questions/347629/how-to-handle-bounded-0-1-dependent-variable-that-causes-one-to-fail-heterosce
+#https://drizopoulos.github.io/GLMMadaptive/articles/Custom_Models.html#beta-mixed-effects-model
+
+library(glmmTMB)
+
+glmmTMB_res <- halflife_res_mixed %>% 
+  mutate(ln_FI_pct_max = log(FI_pct_max + 1.0001)) %>% #add 1 to avoid taking log of 0, while keeping boundaries of ln transformed values between 0 and 1
+  group_by(Antigen) %>%
+  do(broomExtra::tidy(glmmTMB(ln_FI_pct_max ~ Years_Endemic + days_from_max_pct + (1|Subject), data = ., family = beta_family()), conf.int = TRUE)) %>%
+  ungroup() %>%
+  mutate(p.value = as.numeric(formatC(p.value, format = "e", digits = 2))) %>%
+  mutate("BH-adjusted.p.value" = as.numeric(p.adjust(p.value, method = "BH"))) %>%
+  mutate(halflife_days = log(0.5)/estimate) %>%
+  mutate(halflife_days_lowCI = log(0.5)/conf.low) %>%
+  mutate(halflife_days_highCI = log(0.5)/conf.high) %>%
+  mutate(halflife_months = halflife_days/30) %>%
+  mutate(halflife_years = halflife_days/365.25) %>%
+  mutate(across(where(is.numeric), signif, 2)) %>%
+  dplyr::filter(term == "days_from_max_pct") %>%
+  mutate(significant = ifelse(.$"BH-adjusted.p.value"<0.05, "*", "NS")) %>%
+  mutate("BH-adjusted.p.value" = formatC(.$"BH-adjusted.p.value", format = "e", digits = 2)) %>%
+  arrange(desc(halflife_days)) %>%
+  dplyr::select(Antigen, estimate, std.error, "BH-adjusted.p.value", significant, halflife_days, halflife_days_lowCI, halflife_days_highCI)
+```
+
+```{r make table glmmTMB, echo = TRUE, eval = TRUE, warning=FALSE, message=FALSE, fig.width=12}
+library(tableone)
+library(flextable)
+library(officer)
+source("customtab.R")
+
+# Rename first variable from n to No.
+#tab1_df$Variable[1] <- "No."
+# Set Table header
+header <- str_squish(str_remove("Table 3. Antibody half-life determination using beta-distributed response linear mixed effects model of antibody reactivity as percent of max over time, adjusted analysis", "\n"))
+# Set Table footer
+footer <- str_squish(str_remove("A beta-distributed response linear mixed effects model with ln(reactivity) as the dependent variable and time (days) and years in the malaria-endemic Amazon region as fixed effects and subject as a random effect. Half-life (t1/2) was calculated as ln(0.5)/estimate.", "\n"))
+# Set custom_tab() defaults
+customtab_defaults()
+# Create the flextable object
+flextable_glmmTMB_res <- custom_tab(glmmTMB_res, header, footer)
+```
+
+## Table X. Half-lives, beta-distributed response linear mixed effects model, adjusted analysis
+
+Not included in manuscript.
+
+```{r render table glmmTMB, echo = FALSE, warning=FALSE, message=FALSE, fig.width=12}
+flextable_glmmTMB_res
+```
+
+# Longley dataset
+
+## Compare with published Longley et al. PLoS NTD 2017 dataset207
+
+https://www.nature.com/articles/s41591-020-0841-4
+
+```{r compare longley published}
+protein_dat <- data.frame(Protein = c("PVX_097720",
+                                      "PVX_088910",
+                                      "PVX_113775",
+                                      "PVX_110810",
+                                      "PVX_000995",
+                                      "PVP01_0102300",
+                                      "PVX_081550",
+                                      "PVX_094255",
+                                      "PVX_098585"),
+                          Antigen = c("PvMSP3a",
+                                      "PvGAMA",
+                                      "Pv12",
+                                      "PvDBP-FL",
+                                      "Pv41",
+                                      "PvEBP",
+                                      "PVX_081550",
+                                      "PvRBP2b",
+                                      "PvRBP1a"))
+
+longley_dat <- readRDS(paste0(datadir, "Brazil Thailand PNG AlphaScreen Antibody Response dataframe Aditi 05222022.rds")) %>%
+  dplyr::rename(Protein = "Pv code") %>%
+  right_join(., protein_dat, by = "Protein") %>%
+  filter(Antigen != "PvEBP") %>%
+  select(Protein, Antigen, everything())
+
+longley_dat_excel <- readxl::read_excel(paste0(datadir, "Table_S1_final_Longley_Mueller.xlsx")) %>%
+  right_join(., protein_dat, by = "Protein") %>%
+  filter(!duplicated(Protein)) %>%
+  arrange(desc(Braz_d_half)) %>%
+  select(Protein, Antigen, Braz_d_half, Braz_d_half_low, Braz_d_half_high) %>%
+  rename(halflife_days_Longley = Braz_d_half) %>%
+  rename(Longley_lowCI = Braz_d_half_low) %>%
+  rename(Longley_highCI = Braz_d_half_high)
+  
+lmer_adj_res_longley <- lmer_adj_res %>%
+  left_join(., longley_dat_excel,
+            by = "Antigen") %>%
+  select(Antigen, Protein, everything()) %>%
+  rename(PlasmoDB_Accession = Protein)
+```
+
+```{r read in longley, echo=TRUE, eval=TRUE, warning=FALSE, message=FALSE}
+longley_dat_clean <- longley_dat %>%
+  filter(site == "Brazil") %>%
+  #mutate(Antigen = factor(Antigen, levels = c("Pv41", "PvGAMA", "PvRBP2b", "PVX_081550", "PvDBP-FL", "Pv12", "PvMSP3a"))) %>% 
+  rename(Subject = `Subject ID`) %>%
+  mutate(Week = as.numeric(gsub("w", "", visit))) %>%
+  mutate(Day = Week*7) %>%
+  mutate(Month = Week/4) %>%
+  arrange(Subject, Antigen, Week) %>%
+  select(Subject, Antigen, visit, Day, Week, Month, response) %>%
+  group_by(Subject, Antigen, visit, Day, Week, Month) %>%
+  summarise_at(vars(response), mean, na.rm = TRUE) %>%
+  filter(Week != 36) %>% # responses at week 36 go up, so only use data from before week 36
+  ungroup() %>%
+  group_by(Subject, Antigen) %>%
+  mutate(days_from_max_pct = Day - Day[which.max(response)]) %>%
+  filter(between(row_number(),which.max(response), n())) %>%  #this line removes all values before the max so that we can estimate decay from the highest available value
+  filter((response > 0 & Day == 0) | Day > 0) %>% #filter subjects with zero response
+  filter(n()>1) %>% #filter subjects with at least two data points
+  ungroup() %>%
+  mutate(dummy_name = paste(Subject, Antigen, sep="_"))
+
+#remove subjects where all values are zero 
+longley_dat_keep <- longley_dat_clean %>%
+  group_by(Subject, Antigen) %>%
+  summarize(sum = sum(response)) %>%
+  filter(sum > 0) %>%
+  ungroup() %>%
+  mutate(dummy_name = paste(Subject, Antigen, sep="_"))
+
+
+longley_dat_filtered <- longley_dat_clean %>%
+    mutate(dummy_name = paste(Subject, Antigen, sep="_")) %>%
+    filter(dummy_name %in% longley_dat_keep$dummy_name)
+
+
+lmer_adj_res_longley <- longley_dat_filtered %>%
+  select(Subject, Antigen, Day, response) %>%
+  mutate(ln_response = log(response+1)) %>% #add 1 to all values to avoid taking log of zero
+  group_by(Antigen) %>%
+  do(broomExtra::tidy(lmerTest::lmer(ln_response~Day + (1|Subject), data = .), conf.int = TRUE)) %>%
+  ungroup() %>%
+  mutate(p.value = as.numeric(formatC(p.value, format = "e", digits = 2))) %>%
+  mutate("BH-adjusted.p.value" = as.numeric(p.adjust(p.value, method = "BH"))) %>%
+  mutate(halflife_days_longley_recalc = log(0.5)/estimate) %>%
+  mutate(halflife_days_lowCI_longley_recalc = log(0.5)/conf.low) %>%
+  mutate(halflife_days_highCI_longley_recalc = log(0.5)/conf.high) %>%
+  mutate(halflife_months_longley_recalc = halflife_days_longley_recalc/30) %>%
+  mutate(halflife_years_longley_recalc = halflife_days_longley_recalc/365.25) %>%
+  mutate(across(where(is.numeric), signif, 2)) %>%
+  dplyr::filter(term == "Day") %>%
+  mutate(significant = ifelse(.$"BH-adjusted.p.value"<0.05, "*", "NS")) %>%
+  mutate("BH-adjusted.p.value" = formatC(.$"BH-adjusted.p.value", format = "e", digits = 2)) %>%
+  arrange(desc(halflife_days_longley_recalc)) %>%
+  dplyr::select(Antigen, estimate, std.error, "BH-adjusted.p.value", significant, halflife_days_longley_recalc, halflife_days_lowCI_longley_recalc, halflife_days_highCI_longley_recalc)
+
+lmer_adj_res_longley_short <- lmer_adj_res_longley %>%
+  dplyr::select(Antigen, contains("halflife"))
+
+lmer_adj_res_longley_recalc <- protein_dat %>%
+  right_join(., lmer_unadj_res,
+             by = "Antigen") %>%
+  left_join(., lmer_adj_res_longley_short,
+            by = "Antigen") %>%
+  select(Antigen, Protein, everything()) %>%
+  rename(PlasmoDB_Accession = Protein) %>%
+  mutate(overlapping_CIs = ifelse(
+    (halflife_days_highCI_longley_recalc < halflife_days_lowCI) |
+      (halflife_days_highCI < halflife_days_lowCI_longley_recalc) ,
+          "no", "yes"))
+
+lmer_adj_res_longley_recalc %>%
+  filter(overlapping_CIs == "yes") %>%
+  select(Antigen)
+
+lmer_adj_res_longley_recalc %>%
+  filter(overlapping_CIs == "no") %>%
+  select(Antigen)
+```
+
+## Plot Forest Plot comparing Tenshi et al vs Longley et al
+
+```{r forest plot}
+#https://stackoverflow.com/questions/58657802/forest-plot-with-subgroups-in-ggplot2
+
+df_Tenshi = data.frame(Antigen = lmer_adj_res_longley_recalc$Antigen,
+                       Days = lmer_adj_res_longley_recalc$halflife_days,
+                       LCI = lmer_adj_res_longley_recalc$halflife_days_lowCI,
+                       UCI = lmer_adj_res_longley_recalc$halflife_days_highCI,
+                       Study = rep("current study", nrow(lmer_adj_res_longley_recalc)))
+df_Longley = data.frame(Antigen = lmer_adj_res_longley_recalc$Antigen,
+                       Days = lmer_adj_res_longley_recalc$halflife_days_longley_recalc,
+                       LCI = lmer_adj_res_longley_recalc$halflife_days_lowCI_longley_recalc,
+                       UCI = lmer_adj_res_longley_recalc$halflife_days_highCI_longley_recalc,
+                       Study = rep("Longley et al. PLoS NTD 2017 re-analysis", nrow(lmer_adj_res_longley_recalc)))
+df_Longley_og = data.frame(Antigen = longley_dat_excel$Antigen,
+                       Days = longley_dat_excel$halflife_days_Longley,
+                       LCI = longley_dat_excel$Longley_lowCI,
+                       UCI = as.numeric(longley_dat_excel$Longley_highCI),
+                       Study = rep("Longley et al. PLoS NTD 2017 original analysis", nrow(longley_dat_excel)))
+
+
+df_all <- rbind(df_Tenshi, df_Longley, df_Longley_og) %>%
+  mutate(Antigen = factor(Antigen, levels = c("PvMSP3a",
+                                      "PvGAMA",
+                                      "Pv12",
+                                      "PvDBP-FL",
+                                      "Pv41",
+                                      "PvEBP",
+                                      "PVX_081550",
+                                      "PvRBP2b",
+                                      "PvRBP1a"))) %>%
+  mutate(Study = factor(Study, levels = c("Longley et al. PLoS NTD 2017 original analysis",
+                                          "Longley et al. PLoS NTD 2017 re-analysis",
+                                          "current study"))) %>%
+  drop_na() %>%
+  filter(Antigen != "PvEBP") %>%
+  filter(Antigen != "PvRBP1a")
+            
+CI_plots <- ggplot(df_all, aes(x=fct_reorder(Antigen, LCI, min, .desc = FALSE), y=Days,
+                               ymin=LCI, ymax=UCI, col=Study, fill=Study)) + #specify position here
+  geom_linerange(size=2.5,position=position_dodge(width = 0.8), alpha = 0.6) +
+  geom_point(size=1.5, shape=21, colour="white", stroke = 0.25,position=position_dodge(width = 0.8)) +
+  scale_fill_brewer(palette = "Set2")+
+  scale_color_brewer(palette = "Set2")+
+  scale_x_discrete(name="Antigen") +
+  scale_y_continuous(name="T1/2 (days)", n.breaks = 8) +
+  coord_flip() +
+  theme_minimal() + 
+  theme(legend.position = "right")
+
+CI_plots
+```
+
+```{r save CI plots, eval=FALSE, echo=FALSE, fig.align='center', fig.width=4, fig.height=4}
+# cairo_pdf(filename = paste0(figdir, "Fig 4 CI forest plot.pdf"), width = 7, height = 3)
+# CI_plots 
+# dev.off()
+```
+
+
+```{r check longley data, eval=FALSE, echo=FALSE}
+longley_dat %>%
+  mutate(week = as.numeric(gsub("w","", visit))) %>%
+  ggplot(., aes(x=visit, y=response)) +
+  geom_violin() +
+  facet_wrap(~Antigen, scales = "free_y")
+
+
+alldat_norm_bkgd_rem %>%
+  group_by(Antigen, Timepoint) %>%
+  summarize(AU = mean(AU)) %>%
+  drop_na() %>%
+  pivot_wider(., names_from = Timepoint, values_from = AU)
+```
+
+
+
+
