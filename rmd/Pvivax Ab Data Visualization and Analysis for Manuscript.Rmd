@@ -1,12 +1,10 @@
 ---
 title: "*P. vivax* antibody Data Visualization and Analysis for Manuscript"
 author: "Tuan M. Tran"
-date: "07/18/2022"
+date: "08/27/2022"
 output: bookdown::html_document2
 number_sections: yes
 ---
-
-This is the version without code.
 
 # Objective
 
@@ -23,8 +21,9 @@ The major findings of this study to date are:
 [Fig. 1. Correlations of antigen-specific IgG responses]\
 [Fig. 2. Seropositivity at each timepoint by antigen for subjects with data]\
 [Fig. 3. Reactivity over time points, faceted by Pv antigen, as ln(max FI) per subject, exponential decay]\
-[Table 2. Half-lives, linear-mixed effects regression, adjusted analysis]\
-[Table 3. Half-lives, beta-distributed response linear mixed effects model, adjusted analysis]
+[Fig. 4 Forest Plot comparing Tenshi et al vs Longley et al]\
+[Table 2. Half-lives, linear-mixed effects regression, unadjusted analysis]\
+[Table S2. Half-lives, linear-mixed effects regression, adjusted analysis]\
 
 # Setup
 
@@ -79,10 +78,10 @@ alldat_norm_bkgd_rem <- readRDS(paste0(datadir, "alldat_norm_bkgd_rem.rds"))  %>
 library(tableone)
 library(flextable)
 library(officer)
-source("customtab.R")
+source("/Volumes/GoogleDrive/My Drive/Tran Lab Shared/Projects/Vivax Brazil Immune Responses/PvBrazilAbKinetics/customtab.R")
 
 tab_dat <- alldat %>%
-  dplyr::select(Subject, city, gender, age, "Years of Amanzonia State") %>%
+  dplyr::select(Subject, city, gender, age, "Number of prior malaria episodes", "Years of Amanzonia State") %>%
   distinct() %>%
   dplyr::rename("Years residence in Amazon basin" = "Years of Amanzonia State",
                 City = city,
@@ -90,12 +89,13 @@ tab_dat <- alldat %>%
                 "Age, years" = age) %>%
   mutate(Gender = factor(Gender, levels = c("F", "M"), labels = c("female", "male"))) %>%
   mutate(`Years residence in Amazon basin` = as.numeric(`Years residence in Amazon basin`)) %>%
+  mutate(`Number of prior malaria episodes`= as.numeric(`Number of prior malaria episodes`)) %>%
   filter(!grepl("NAC",Subject)) %>% 
   filter(!grepl("pos",Subject))
   
-myVars <- c("Gender", "Age, years", "Years residence in Amazon basin")
+myVars <- c("Gender", "Age, years", "Number of prior malaria episodes", "Years residence in Amazon basin")
 catVars <- c("Gender")
-nonnormalVars <- c("Age, years", "Years residence in Amazon basin")
+nonnormalVars <- c("Age, years", "Number of prior malaria episodes", "Years residence in Amazon basin")
 tab1 <- tab_dat %>% CreateTableOne(vars = myVars,
                                    strata = "City",
                                    data = . ,
@@ -139,10 +139,10 @@ flextable_1
 
 ```{r table 1 save to doc, echo = FALSE, eval=FALSE}
 # Save as word .docx
-# save_as_docx(flextable_1, path = paste0(resdir,"/Table 1 working.docx"),
-# pr_section =
-# prop_section(page_size = page_size(orient = "landscape"),
-# type = "continuous"))
+save_as_docx(flextable_1, path = paste0(resdir,"/Table 1 working.docx"),
+pr_section =
+prop_section(page_size = page_size(orient = "portrait"),
+type = "continuous"))
 ```
 
 # Correlations
@@ -791,7 +791,7 @@ lmer_unadj_res <- halflife_res_mixed %>%
 library(tableone)
 library(flextable)
 library(officer)
-source("customtab.R")
+source("/Volumes/GoogleDrive/My Drive/Tran Lab Shared/Projects/Vivax Brazil Immune Responses/PvBrazilAbKinetics/customtab.R")
 
 foo1 <- lmer_unadj_res %>%
   dplyr::select(Antigen, estimate, std.error, statistic, halflife_days, halflife_days_lowCI, halflife_days_highCI)
@@ -841,7 +841,7 @@ lmer_adj_res <- halflife_res_mixed %>%
 library(tableone)
 library(flextable)
 library(officer)
-source("customtab.R")
+source("/Volumes/GoogleDrive/My Drive/Tran Lab Shared/Projects/Vivax Brazil Immune Responses/PvBrazilAbKinetics/customtab.R")
 
 foo2 <- lmer_adj_res %>%
   dplyr::select(Antigen, estimate, std.error, "BH-adjusted.p.value", significant, halflife_days, halflife_days_lowCI, halflife_days_highCI)
@@ -888,13 +888,13 @@ colnames(unadj_and_adj) <- gsub("\\.x", "_unadj", colnames(unadj_and_adj))
 colnames(unadj_and_adj) <- gsub("\\.y", "_adj", colnames(unadj_and_adj))
 ```
 
-```{r write table S1, echo=TRUE}
-writexl::write_xlsx(unadj_and_adj, paste0(resdir, "Table S1 lmer both adj and unadj include prior malaria 06122022.xlsx"))
+```{r write table S1, echo=FALSE, eval=FALSE}
+writexl::write_xlsx(unadj_and_adj, paste0(resdir, "Table S2 lmer both adj and unadj include prior malaria 06122022.xlsx"))
 ```
 
-We can also use a linear mixed effects model with a beta-distributed response using FI_pct_max given that the y (dependent variable) is bounded by 0 and 1. This can be achieved from shifting the 0 and 1 values slight towards 0.5.
 
-```{r glmm adaptibe mixed model, echo = TRUE, eval= TRUE, warning=FALSE, message=FALSE}
+```{r glmm adaptibe mixed model, echo = FALSE, eval= FALSE, warning=FALSE, message=FALSE}
+# We can also use a linear mixed effects model with a beta-distributed response using FI_pct_max given that the y (dependent variable) is bounded by 0 and 1. This can be achieved from shifting the 0 and 1 values slight towards 0.5.
 #https://stats.stackexchange.com/questions/347629/how-to-handle-bounded-0-1-dependent-variable-that-causes-one-to-fail-heterosce
 #https://drizopoulos.github.io/GLMMadaptive/articles/Custom_Models.html#beta-mixed-effects-model
 
@@ -920,11 +920,11 @@ glmmTMB_res <- halflife_res_mixed %>%
   dplyr::select(Antigen, estimate, std.error, "BH-adjusted.p.value", significant, halflife_days, halflife_days_lowCI, halflife_days_highCI)
 ```
 
-```{r make table glmmTMB, echo = TRUE, eval = TRUE, warning=FALSE, message=FALSE, fig.width=12}
+```{r make table glmmTMB, echo = FALSE, eval = FALSE, warning=FALSE, message=FALSE, fig.width=12}
 library(tableone)
 library(flextable)
 library(officer)
-source("customtab.R")
+source("/Volumes/GoogleDrive/My Drive/Tran Lab Shared/Projects/Vivax Brazil Immune Responses/PvBrazilAbKinetics/customtab.R")
 
 # Rename first variable from n to No.
 #tab1_df$Variable[1] <- "No."
@@ -938,19 +938,18 @@ customtab_defaults()
 flextable_glmmTMB_res <- custom_tab(glmmTMB_res, header, footer)
 ```
 
-## Table X. Half-lives, beta-distributed response linear mixed effects model, adjusted analysis
 
-Not included in manuscript.
 
-```{r render table glmmTMB, echo = FALSE, warning=FALSE, message=FALSE, fig.width=12}
+```{r render table glmmTMB, echo = FALSE, eval = FALSE, warning=FALSE, message=FALSE, fig.width=12}
+#Table X. Half-lives, beta-distributed response linear mixed effects model, adjusted analysis
+#Not included in manuscript.
 flextable_glmmTMB_res
 ```
 
 # Longley dataset
 
-## Compare with published Longley et al. PLoS NTD 2017 dataset207
+## Compare with published Longley et al. PLoS NTD 2017 dataset
 
-https://www.nature.com/articles/s41591-020-0841-4
 
 ```{r compare longley published}
 protein_dat <- data.frame(Protein = c("PVX_097720",
@@ -1074,7 +1073,7 @@ lmer_adj_res_longley_recalc %>%
   select(Antigen)
 ```
 
-## Plot Forest Plot comparing Tenshi et al vs Longley et al
+## Fig. 4 Forest Plot comparing Tenshi et al vs Longley et al
 
 ```{r forest plot}
 #https://stackoverflow.com/questions/58657802/forest-plot-with-subgroups-in-ggplot2
