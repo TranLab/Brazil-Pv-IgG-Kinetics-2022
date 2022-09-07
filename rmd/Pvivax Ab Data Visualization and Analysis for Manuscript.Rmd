@@ -27,7 +27,7 @@ The major findings of this study to date are:
 
 # Setup
 
-```{r setup, include=TRUE, echo = FALSE, message=FALSE, warning=FALSE}
+```{r setup, include=TRUE, echo = TRUE, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
 library(readxl)
@@ -37,6 +37,12 @@ library(ggrepel)
 library(pals)
 library(corrplot)
 library(bookdown)
+library(googledrive)
+```
+
+# Setup local paths
+
+```{r directories, echo=TRUE, message=FALSE, warning=FALSE}
 datadir <- "/Volumes/GoogleDrive/My Drive/Tran Lab Shared/Projects/Vivax Brazil Immune Responses/PvBrazilAbKinetics/"
 resdir <-"/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
 figdir <- "/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
@@ -46,7 +52,12 @@ figdir <- "/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Ma
 
 ```{r readin data, echo = TRUE, warning = FALSE, message=FALSE}
 #read in all data
-alldat <- readRDS(paste0(datadir,"Brazil Pvivax dataframe Aditi 02282022.rds")) %>%
+#from google drive
+temp <- tempfile(fileext = ".rds")
+dl <- drive_download(
+  as_id("1QaaBFN4rPDqjO_hhxvjB-VF5lsjYE5AG"), path = temp, overwrite = TRUE)
+#alldat <- readRDS(paste0(datadir,"Brazil Pvivax dataframe Aditi 02282022.rds")) %>% # local path
+alldat <- readRDS(file = dl$local_path) %>%
   dplyr::filter(Dilution == "1:400") %>%
   mutate(Antigen = gsub("DBP-FL", "PvDBP-FL", Antigen)) %>%
   mutate(Antigen = gsub("MSP3a", "PvMSP3a", Antigen)) %>%
@@ -67,7 +78,11 @@ alldat <- readRDS(paste0(datadir,"Brazil Pvivax dataframe Aditi 02282022.rds")) 
   mutate(AntigenType = factor(AntigenType, levels = c("background control", "reactivity control", "P. vivax antigen")))
 
 #read in cleaned data
-alldat_norm_bkgd_rem <- readRDS(paste0(datadir, "alldat_norm_bkgd_rem.rds"))  %>%
+temp <- tempfile(fileext = ".rds")
+dl <- drive_download(
+  as_id("1kOau1oVMp0tvGIPDHMFpAaCMKf4suBJs"), path = temp, overwrite = TRUE)
+#alldat_norm_bkgd_rem <- readRDS(paste0(datadir, "alldat_norm_bkgd_rem.rds"))  %>% #local path
+alldat_norm_bkgd_rem <- readRDS(file = dl$local_path) %>%
   mutate(Antigen = gsub("Tetanus Toxoid", "tetanus toxoid", Antigen))
 ```
 
