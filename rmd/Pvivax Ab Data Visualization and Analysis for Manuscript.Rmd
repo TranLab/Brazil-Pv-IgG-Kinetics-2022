@@ -1,21 +1,20 @@
 ---
-title: "*P. vivax* antibody Data Visualization and Analysis for Manuscript"
+title: "*Longitudinal IgG antibody responses to Plasmodium vivax blood-stage antigens during and after acute vivax malaria in individuals living in the Brazilian Amazon"
 author: "Tuan M. Tran"
-date: "08/27/2022"
+date: "09/06/2022"
 output: bookdown::html_document2
 number_sections: yes
 ---
 
 # Objective
 
-The goal of this markdown is to visualize the antibody reactivity data from multiplex immunoassays performed by Tenzin Tashi and compiled by Aditi Upadhye for the CTC PDT funded project "Evaluating the dynamics and function of naturally acquired humoral immune responses to *Plasmodium vivax* vaccine candidate antigens in a longitudinal study."
+Code for the study:
 
-The data consists of IgG responses specific against several *P. vivax* antigens using plasma obtained for Brazilian patients with acute vivax malaria and followed up at days 30, 60, and 180 after initial enrollment. This is an initial attempt to analyze the decay of antibody responses over time.
+Longitudinal IgG antibody responses to Plasmodium vivax blood-stage antigens during and after acute vivax malaria in individuals living in the Brazilian Amazon
 
-The major findings of this study to date are:
+Tenzin Tashi, Aditi Upadhye, Prasun Kundu, Chunxiang Wu, Sébastien Menant, Roberta Reis Soares, Marcelo Urbano Ferreira, Rhea J. Longley, Ivo Mueller, Quyen Q. Hoang, Wai-Hong Tham, Julian C. Rayner, Kézia KG Scopel, Josué C. Lima Junior, Tuan M. Tran
 
-1. The antigens with the highest seroprevalence after acute *P. vivax* malaria are Pv41, PvGAMA, PvRBP2b.
-2. Antigens that produce the longest-lived IgG responses after acute vivax malaria are PVX_081550, PvRBP2b, and PvMSP3a.
+medRxiv 2022.08.30.22279402; doi: https://doi.org/10.1101/2022.08.30.22279402
 
 [Table 1. Participant characteristics]\
 [Fig. 1. Correlations of antigen-specific IgG responses]\
