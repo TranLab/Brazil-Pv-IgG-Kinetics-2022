@@ -1,5 +1,5 @@
 ---
-title: "*Longitudinal IgG antibody responses to Plasmodium vivax blood-stage antigens during and after acute vivax malaria in individuals living in the Brazilian Amazon"
+title: "Longitudinal IgG antibody responses to *Plasmodium vivax* blood-stage antigens during and after acute vivax malaria in individuals living in the Brazilian Amazon"
 author: "Tuan M. Tran"
 date: "09/06/2022"
 output: bookdown::html_document2
@@ -10,11 +10,11 @@ number_sections: yes
 
 Code for the study:
 
-Longitudinal IgG antibody responses to Plasmodium vivax blood-stage antigens during and after acute vivax malaria in individuals living in the Brazilian Amazon
+Longitudinal IgG antibody responses to *Plasmodium vivax* blood-stage antigens during and after acute vivax malaria in individuals living in the Brazilian Amazon
 
 Tenzin Tashi, Aditi Upadhye, Prasun Kundu, Chunxiang Wu, Sébastien Menant, Roberta Reis Soares, Marcelo Urbano Ferreira, Rhea J. Longley, Ivo Mueller, Quyen Q. Hoang, Wai-Hong Tham, Julian C. Rayner, Kézia KG Scopel, Josué C. Lima Junior, Tuan M. Tran
 
-medRxiv 2022.08.30.22279402; doi: https://doi.org/10.1101/2022.08.30.22279402
+*medRxiv* 2022.08.30.22279402; doi: https://doi.org/10.1101/2022.08.30.22279402
 
 [Table 1. Participant characteristics]\
 [Fig. 1. Correlations of antigen-specific IgG responses]\
