@@ -1,7 +1,7 @@
 ---
 title: "Longitudinal IgG antibody responses to *Plasmodium vivax* blood-stage antigens during and after acute vivax malaria in individuals living in the Brazilian Amazon"
 author: "Tuan M. Tran"
-date: "09/06/2022"
+date: "10/20/2022"
 output: bookdown::html_document2
 number_sections: yes
 ---
@@ -14,11 +14,12 @@ Longitudinal IgG antibody responses to *Plasmodium vivax* blood-stage antigens d
 
 Tenzin Tashi, Aditi Upadhye, Prasun Kundu, Chunxiang Wu, Sébastien Menant, Roberta Reis Soares, Marcelo Urbano Ferreira, Rhea J. Longley, Ivo Mueller, Quyen Q. Hoang, Wai-Hong Tham, Julian C. Rayner, Kézia KG Scopel, Josué C. Lima Junior, Tuan M. Tran
 
-*medRxiv* 2022.08.30.22279402; doi: https://doi.org/10.1101/2022.08.30.22279402
+medRxiv 2022.08.30.22279402; doi: https://doi.org/10.1101/2022.08.30.22279402
 
 [Table 1. Participant characteristics]\
 [Fig. 1. Correlations of antigen-specific IgG responses]\
 [Fig. 2. Seropositivity at each timepoint by antigen for subjects with data]\
+[Fig. S1. Seropositivity by antigen by study site]\
 [Fig. 3. Reactivity over time points, faceted by Pv antigen, as ln(max FI) per subject, exponential decay]\
 [Fig. 4 Forest Plot comparing Tenshi et al vs Longley et al]\
 [Table 2. Half-lives, linear-mixed effects regression, unadjusted analysis]\
@@ -39,9 +40,7 @@ library(bookdown)
 library(googledrive)
 ```
 
-# Setup local paths
-
-```{r directories, echo=TRUE, message=FALSE, warning=FALSE}
+```{r local directories, echo=TRUE, message=FALSE, warning=FALSE}
 datadir <- "/Volumes/GoogleDrive/My Drive/Tran Lab Shared/Projects/Vivax Brazil Immune Responses/PvBrazilAbKinetics/"
 resdir <-"/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
 figdir <- "/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
@@ -85,9 +84,9 @@ alldat_norm_bkgd_rem <- readRDS(file = dl$local_path) %>%
   mutate(Antigen = gsub("Tetanus Toxoid", "tetanus toxoid", Antigen))
 ```
 
-# Make table of participant characteristics
+Make table of participant characteristics
 
-```{r participant characteristics, echo = FALSE, warning=FALSE, message=FALSE}
+```{r participant characteristics, echo = TRUE, warning=FALSE, message=FALSE}
 #https://www.r-bloggers.com/2021/11/publication-ready-tables-with-flextable-and-own-theme-in-r/
 library(tableone)
 library(flextable)
@@ -121,8 +120,6 @@ tab1 <- tab_dat %>% CreateTableOne(vars = myVars,
 tab1_word <- print(tab1,
 quote = F,
 noSpaces = T,
-# smd = T,
-# missing = T,
 test = T,
 contDigits = 1,
 printToggle = T,
@@ -130,11 +127,9 @@ dropEqual = T,
 explain = T,
 nonnormal = nonnormalVars,
 minMax = TRUE)
-#summary(tab1)
+
 # Convert to dataframe
 tab1_df <- as.data.frame(tab1_word) %>% rownames_to_column(var = "Variable")
-# Rename first variable from n to No.
-#tab1_df$Variable[1] <- "No."
 # Set Table header
 header <- str_squish(str_remove("Table 1. Baseline characteristics of study participants", "\n"))
 # Set Table footer
@@ -163,7 +158,7 @@ type = "continuous"))
 
 Make correlation matrices for each timepoint
 
-```{r plot correlation heatmap, echo = FALSE, warning=FALSE, message=FALSE, fig.width=8, fig.height= 8, fig.align='center'}
+```{r plot correlation heatmap, echo = TRUE, warning=FALSE, message=FALSE, fig.width=8, fig.height= 8, fig.align='center'}
 #To fix p values and correlation coefficient on the same plot: https://stackoverflow.com/questions/63227830/r-corrplot-plot-correlation-coefficients-along-with-significance-stars
 
 #timepoint 0
@@ -392,7 +387,7 @@ alldat_norm_bkgd_rem <- alldat_norm_bkgd_rem %>%
 Evaluate seroprevalence (% seropositive) for each timepoint, faceted by antigen
 
 ```{r seroprevalence by antigen, echo = TRUE, warning=FALSE, message=FALSE, fig.align='center', fig.cap="Seroprevalence at each timepoint by antigen"}
-alldat_norm_bkgd_rem %>%
+all_sero <- alldat_norm_bkgd_rem %>%
   filter(AntigenType == "P. vivax antigen" & Group == "Brazilian") %>%
   filter(!is.na(Timepoint)) %>%
   filter(!is.na(seropositive)) %>%
@@ -412,7 +407,123 @@ alldat_norm_bkgd_rem %>%
   facet_wrap(~Antigen)
 ```
 
+All sites
+
+```{r plot all sero sites, fig.align='center', fig.height=8, fig.width=8}
+all_sero 
+```
+
 The data shows that >50% seroprevalence is maintained for Pv41, PvGAMA, and PvRBP2 from acute presentation all the way up to 180 days. Pv12 and PvEBP also demonstrate more prolonged maintenance of seropositivity 180 days from acute vivax malaria.
+
+Evaluate seroprevalence (% seropositive) for each timepoint, faceted by antigen and study site
+
+```{r seroprevalence by ag by  site, echo = TRUE, warning=FALSE, message=FALSE, fig.align='center', fig.width=12, fig.height=12}
+
+
+foo_dat <- alldat_norm_bkgd_rem %>%
+  left_join(., alldat %>%
+              dplyr::select(Subject, city) %>%
+              distinct(Subject, city),
+            by = "Subject") %>%
+  filter(AntigenType == "P. vivax antigen" & Group == "Brazilian") %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(!is.na(seropositive))
+
+acrelandia <- foo_dat %>%
+  filter(city == "Acrelândia") %>%
+  filter(!is.na(city)) %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(!is.na(seropositive)) %>%
+  group_by(Antigen, Timepoint) %>%
+  summarize(n = n(), seroprevalence = sum(seropositive)/n()) %>%
+  mutate(timepoint = factor(Timepoint)) %>%
+  mutate(timepoint = paste0(timepoint, " (n=", n, ")")) %>%
+  mutate(timepoint = fct_reorder(timepoint, Timepoint, .desc = FALSE)) %>%
+  ggplot(., aes(x=timepoint, y = seroprevalence)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) +
+  ylab("% seropositive") +
+  xlab("days from acute vivax malaria") +
+  geom_hline(yintercept = .50, linetype = "dotted", color="red") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  facet_wrap(~Antigen)
+
+california <- foo_dat %>%
+  filter(city == "Califónia") %>%
+  filter(!is.na(city)) %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(!is.na(seropositive)) %>%
+  group_by(Antigen, Timepoint) %>%
+  mutate(city = gsub("Califónia", "Califórnia", city)) %>%
+  group_by(Antigen, Timepoint) %>%
+  summarize(n = n(), seroprevalence = sum(seropositive)/n()) %>%
+  mutate(timepoint = factor(Timepoint)) %>%
+  mutate(timepoint = paste0(timepoint, " (n=", n, ")")) %>%
+  mutate(timepoint = fct_reorder(timepoint, Timepoint, .desc = FALSE)) %>%
+  ggplot(., aes(x=timepoint, y = seroprevalence)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) +
+  ylab("% seropositive") +
+  xlab("days from acute vivax malaria") +
+  geom_hline(yintercept = .50, linetype = "dotted", color="red") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  facet_wrap(~Antigen)
+
+jessica <- foo_dat %>%
+  filter(city == "Jéssica") %>%
+  filter(!is.na(city)) %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(!is.na(seropositive)) %>%
+  group_by(Antigen, Timepoint) %>%
+  summarize(n = n(), seroprevalence = sum(seropositive)/n()) %>%
+  mutate(timepoint = factor(Timepoint)) %>%
+  mutate(timepoint = paste0(timepoint, " (n=", n, ")")) %>%
+  mutate(timepoint = fct_reorder(timepoint, Timepoint, .desc = FALSE)) %>%
+  ggplot(., aes(x=timepoint, y = seroprevalence)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) +
+  ylab("% seropositive") +
+  xlab("days from acute vivax malaria") +
+  geom_hline(yintercept = .50, linetype = "dotted", color="red") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  facet_wrap(~Antigen)
+
+placido <- foo_dat %>%
+  filter(city == "Plácido") %>%
+  filter(!is.na(city)) %>%
+  filter(!is.na(Timepoint)) %>%
+  filter(!is.na(seropositive)) %>%
+  group_by(Antigen, Timepoint) %>%
+  summarize(n = n(), seroprevalence = sum(seropositive)/n()) %>%
+  mutate(timepoint = factor(Timepoint)) %>%
+  mutate(timepoint = paste0(timepoint, " (n=", n, ")")) %>%
+  mutate(timepoint = fct_reorder(timepoint, Timepoint, .desc = FALSE)) %>%
+  ggplot(., aes(x=timepoint, y = seroprevalence)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) +
+  ylab("% seropositive") +
+  xlab("days from acute vivax malaria") +
+  geom_hline(yintercept = .50, linetype = "dotted", color="red") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  facet_wrap(~Antigen)
+
+all_sero_plots <- ggarrange(acrelandia, california, jessica, placido,all_sero, 
+          labels = c("Acrelândia", "Califórnia","Jéssica","Plácido", "all sites"), ncol = 2, nrow = 3)
+# cairo_pdf(filename = paste0(figdir, "Figure S1 Seroprevalence by Site.pdf"),
+#           height = 11, width = 8.5)
+# all_sero_plots
+# dev.off()
+```
+
+## Fig. S1. Seropositivity by antigen by study site
+
+```{r plot seropositivity by study site, fig.align='center', fig.width= 10, fig.height=10}
+all_sero_plots
+```
 
 We take advantage of the longitudinal data to ask how many people are seropositive at admission and either seroconvert or serorevert over time?
 
@@ -459,12 +570,9 @@ seropos_ag_time <- alldat_norm_bkgd_rem %>%
   mutate(subject = fct_reorder(subject, subj_order, .desc = FALSE)) %>%
   mutate(Antigen = fct_reorder(Antigen, seroprevalence, .fun =  max, .desc = TRUE)) %>%
   mutate(AU = ifelse(AU > 1, AU, 0)) %>%
-  #ggplot(., aes(x=timepoint_lab, y = subject, fill = reactivity)) +
   ggplot(., aes(x=timepoint_lab, y = subject, fill = log(AU))) +
   geom_tile(color = "white", size = 0.1) +
-  #scale_fill_manual(values = c("gray80", "black")) +
   scale_fill_continuous(type = "viridis", na.value="gray80") +
-  #coord_equal() +
   facet_wrap(~Antigen, nrow = 1, scales = "free_x") +
   labs( x= "days from acute vivax (seropositive/total, seroprevalence)",
        y = "subjects") +
@@ -472,7 +580,6 @@ seropos_ag_time <- alldat_norm_bkgd_rem %>%
   theme(text = element_text(size=11),
         axis.ticks=element_blank(),
         axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
-        #axis.text.y = element_blank(),
         axis.text=element_text(size=9.5),
         panel.border=element_blank(),
         plot.title=element_text(hjust=0),
@@ -493,16 +600,16 @@ seropos_ag_time <- alldat_norm_bkgd_rem %>%
 seropos_ag_time
 ```
 
-```{r save seroprevalence plot, echo=FALSE}
-figdir <- "/Volumes/GoogleDrive/My Drive/Manuscripts/Brazil Antibody Kinetics Manuscript/Figures and Tables/"
-# ggsave(plot = seropos_ag_time,
-#        filename = paste0(figdir, "Fig 2 Seroprevalence by Antigen Over Time Continuous 06072022.pdf"),
-#        units = "in",
-#        width = 7.5,
-#        height = 7.5)
+```{r save seroprevalence plot, echo=FALSE, eval=FALSE}
+figdir <- "/Users/tuantran/OneDrive - Indiana University/FromGoogle/Manuscripts/Brazil Antibody Kinetics Manuscript/PLOS NTD Submission August 2022/PLoS NTD Revison/"
+ggsave(plot = seropos_ag_time,
+       filename = paste0(figdir, "Fig 2 Seroprevalence by Ag Over Time Continuous 10172022 REV.pdf"),
+       units = "in",
+       width = 7.5,
+       height = 7.5)
 ```
 
-Subjects with all four time points
+Reduce to subjects who had data at all four time points
 
 ```{r filter subjects with all 4 timepoints, echo = TRUE, warning=FALSE, message=FALSE, fig.width=12, fig.height= 3, fig.align='center'}
 mytable <- table("subject" = alldat_norm_bkgd_rem$Subject, "time point" = alldat_norm_bkgd_rem$Timepoint)
@@ -514,7 +621,7 @@ subjects_with_0_3_60_180 <- as.data.frame.matrix(mytable, optional = TRUE, make.
   dplyr::filter(`0` != 0 & `30` != 0 & `60` != 0 & `180` != 0) %>%
   .$Subject
 
-length(unique(subjects_with_0_3_60_180))
+#length(unique(subjects_with_0_3_60_180))
 
 alldat_norm_bkgd_rem %>%
   filter(Subject %in% subjects_with_0_3_60_180) %>%
@@ -577,7 +684,7 @@ subjects_with_0_30 <- as.data.frame.matrix(mytable, optional = TRUE, make.names 
   dplyr::filter(`0` != 0 & `30` != 0) %>%
   .$Subject
 
-length(unique(subjects_with_0_30))
+#length(unique(subjects_with_0_30))
 
 #with 0, 30, 60
 subjects_with_0_3_60 <- as.data.frame.matrix(mytable, optional = TRUE, make.names = TRUE) %>%
@@ -586,14 +693,13 @@ subjects_with_0_3_60 <- as.data.frame.matrix(mytable, optional = TRUE, make.name
   dplyr::filter(`0` != 0 & `30` != 0 & `60` != 0) %>%
   .$Subject
 
-length(unique(subjects_with_0_3_60))
+#length(unique(subjects_with_0_3_60))
 ```
 
 ```{r plot pct of max over time, eval= FALSE, echo = FALSE, warning=FALSE, message=FALSE, fig.width=10, fig.height=6, fig.align='center', fig.cap="Reactivity over time points by antigen, faceted by antigen type, as percent of max FI per subject, median"}
 alldat_norm_bkgd_rem_pctmax %>%
   filter(Subject  %in% subjects_with_0_30) %>% #filter on subjects with at least day 0 and 30 data
   ggplot(., aes(x=Timepoint, y = FI_pct_max, group = Antigen, color = Antigen)) +
-  #geom_point() +
   stat_summary(aes(group=Antigen), fun=median, geom="line") +
   geom_hline(yintercept = 1, linetype = "dotted", color = "gray") +
   scale_y_continuous(labels = scales::percent) +
@@ -626,7 +732,6 @@ Requirements
 
 ```{r use mixed approach, echo = TRUE, eval=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
 myantigens <- c("Pv41", "PvGAMA", "PvRBP2b", "PVX_081550", "PvDBP-FL", "PvEBP", "Pv12", "PvMSP3a", "tetanus toxoid")
-#not usd for manuscript
 #https://academic.oup.com/abt/article/4/3/144/6309336
 #tetanus antibodies: https://www.nejm.org/doi/full/10.1056/NEJMoa066092
 library(lmerTest)
@@ -670,8 +775,6 @@ Plot exponential decay
 #add small prior to FI_pct_max to avoid taking log of zero
 exponential_decay_plot_all <- halflife_res_mixed %>%
   ggplot(., aes(x=days_from_max_pct, y = FI_pct_max + 0.0001, fill= Antigen, group = Antigen, color = Antigen)) +
-  #geom_point(colour="black",pch=21, size=2.5) +
-  #geom_smooth(method ="lm", formula = y~x, alpha = 0.15) +
   geom_smooth(method="glm", formula=y~x, method.args=list(family=gaussian(link="log")), alpha = 0.15, se = TRUE) +
   geom_hline(yintercept = c(0.25,0.5,0.75,1), linetype = "dotted", color = "gray") +
   scale_y_continuous(labels = scales::percent, breaks = c(0.25,0.5,0.75,1)) +
@@ -681,7 +784,6 @@ exponential_decay_plot_all <- halflife_res_mixed %>%
   theme_bw() +
   theme(text = element_text(size=11),
         axis.ticks=element_blank(),
-        #axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
         axis.text=element_text(size=6.5),
         panel.border=element_blank(),
         plot.title=element_text(hjust=0),
@@ -705,10 +807,35 @@ exponential_decay_plot_all
 nls_fit <- halflife_res_mixed %>%
   nls(formula = FI_pct_max + 0.0001 ~ a*exp(-b *days_from_max_pct), 
                start = c(a=10, b=0.01), data = .)
-coef(nls_fit)
+#coef(nls_fit)
 
 #add small prior to FI_pct_max to avoid taking log of zero
-exponential_decay_plot_all_facet <- exponential_decay_plot_all +
+exponential_decay_plot_all_facet <- halflife_res_mixed %>%
+  ggplot(., aes(x=days_from_max_pct, y = FI_pct_max + 0.0001, fill= Antigen, group = Antigen, color = Antigen)) +
+  geom_point(colour="black",pch=21, size=2.5) +
+  geom_smooth(method="glm", formula=y~x, method.args=list(family=gaussian(link="log")), alpha = 0.15, se = TRUE) +
+  geom_hline(yintercept = c(0.25,0.5,0.75,1), linetype = "dotted", color = "gray") +
+  scale_y_continuous(labels = scales::percent, breaks = c(0.25,0.5,0.75,1)) +
+  scale_x_continuous(breaks = c(0,30,60,90,120,150,180)) +
+  ylab("percent of max antibody reactivity") +
+  xlab("days after max antibody reactivity") +
+  theme_bw() +
+  theme(text = element_text(size=11),
+        axis.ticks=element_blank(),
+        axis.text=element_text(size=6.5),
+        panel.border=element_blank(),
+        plot.title=element_text(hjust=0),
+        strip.background = element_blank(),
+        panel.spacing.x = unit(0.25, "cm"),
+        panel.spacing.y = unit(0.25, "cm"),
+        legend.position = "top",
+        legend.title=element_blank(),
+        legend.title.align=1,
+        legend.text=element_text(size=8),
+        legend.key.size=unit(0.15, "cm"),
+        legend.key.width=unit(0.15, "cm")) +
+  scale_color_brewer(palette="Spectral") +
+  scale_fill_brewer(palette="Spectral") +
   stat_regline_equation(label.y = 1.07, label.x = 100, aes(label = ..adj.rr.label..), color = "gray10", cex = 3) +
   theme(legend.position = "none") +
   facet_wrap(~Antigen)
@@ -716,9 +843,8 @@ exponential_decay_plot_all_facet <- exponential_decay_plot_all +
 exponential_decay_plot_all_facet
 ```
 
-Plot natural log of FI to linearize
-
-```{r estimate as exponential decay facet by antigen, echo = TRUE, warning=FALSE, message=FALSE, fig.align='center', fig.width=9, fig.height=9}
+```{r estimate as exponential decay facet by antigen, echo = FALSE, eval=FALSE, warning=FALSE, message=FALSE, fig.align='center', fig.width=9, fig.height=9}
+#Plot natural log of FI to linearize
 #add small prior to FI_pct_max to avoid taking log of zero
 linear_decay_plot_facet <- halflife_res_mixed %>%
   ggplot(., aes(x=days_from_max_pct, y = ln_FI_pct_max, group = Antigen, fill= Antigen, color = Antigen)) +
@@ -890,9 +1016,8 @@ type = "continuous"))
 #Recently, longitudinal studies have provided estimates of the longevity of antibody response against PvRBP2b, estimating a mean half-life of ~ 3.8 months in cohorts from Thailand and Brazil [11], indicating the moderate longevity of antibodies even in low transmission settings.
 ```
 
-# Table S2. Include more measures and both models
 
-```{r make table S2, echo=TRUE}
+```{r make table S2, echo=FALSE, eval=FALSE}
 unadj_and_adj <- lmer_unadj_res %>%
   dplyr::select(-c(effect, df, group, term, halflife_months, halflife_years, significant)) %>%
   left_join(., lmer_adj_res %>%
@@ -900,9 +1025,7 @@ unadj_and_adj <- lmer_unadj_res %>%
   by = "Antigen")
 colnames(unadj_and_adj) <- gsub("\\.x", "_unadj", colnames(unadj_and_adj))
 colnames(unadj_and_adj) <- gsub("\\.y", "_adj", colnames(unadj_and_adj))
-```
 
-```{r write table S1, echo=FALSE, eval=FALSE}
 writexl::write_xlsx(unadj_and_adj, paste0(resdir, "Table S2 lmer both adj and unadj include prior malaria 06122022.xlsx"))
 ```
 
@@ -965,7 +1088,7 @@ flextable_glmmTMB_res
 ## Compare with published Longley et al. PLoS NTD 2017 dataset
 
 
-```{r compare longley published}
+```{r compare longley published, echo=TRUE}
 protein_dat <- data.frame(Protein = c("PVX_097720",
                                       "PVX_088910",
                                       "PVX_113775",
@@ -1089,7 +1212,7 @@ lmer_adj_res_longley_recalc %>%
 
 ## Fig. 4 Forest Plot comparing Tenshi et al vs Longley et al
 
-```{r forest plot}
+```{r forest plot, echo=TRUE}
 #https://stackoverflow.com/questions/58657802/forest-plot-with-subgroups-in-ggplot2
 
 df_Tenshi = data.frame(Antigen = lmer_adj_res_longley_recalc$Antigen,
@@ -1137,7 +1260,10 @@ CI_plots <- ggplot(df_all, aes(x=fct_reorder(Antigen, LCI, min, .desc = FALSE), 
   coord_flip() +
   theme_minimal() + 
   theme(legend.position = "right")
+```
 
+
+```{r plot forest plot, echo=TRUE, fig.align='center', fig.width=8, fig.height=4}
 CI_plots
 ```
 
@@ -1145,22 +1271,6 @@ CI_plots
 # cairo_pdf(filename = paste0(figdir, "Fig 4 CI forest plot.pdf"), width = 7, height = 3)
 # CI_plots 
 # dev.off()
-```
-
-
-```{r check longley data, eval=FALSE, echo=FALSE}
-longley_dat %>%
-  mutate(week = as.numeric(gsub("w","", visit))) %>%
-  ggplot(., aes(x=visit, y=response)) +
-  geom_violin() +
-  facet_wrap(~Antigen, scales = "free_y")
-
-
-alldat_norm_bkgd_rem %>%
-  group_by(Antigen, Timepoint) %>%
-  summarize(AU = mean(AU)) %>%
-  drop_na() %>%
-  pivot_wider(., names_from = Timepoint, values_from = AU)
 ```
 
 
